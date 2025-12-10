@@ -29,6 +29,7 @@ Links:
 * [FAQ](https://docs.google.com/document/d/1uBSxORcxOewXMzMDHwADpVSiS0kBRXhTQ3qWd86CjlI/edit)
 * [Course Playlist](https://www.youtube.com/watch?v=sUwrCnP2iGU&list=PL3MmuxUbc_hLuyafXPyhTdbF4s_uNhc43)
 * [Course Launch Stream](https://www.youtube.com/watch?v=58pn873XO04&list=PL3MmuxUbc_hLuyafXPyhTdbF4s_uNhc43)
+* [Article with details about the course](https://datatalks.club/blog/ai-dev-tools-zoomcamp-2025-free-course-to-master-coding-assistants-agents-and-automation.html)
 
 ## How to Join?
 
@@ -87,16 +88,16 @@ You don't need any AI experience to start - just curiosity about using AI tools 
 
 ### Module 6 — [Automation with Low-Code and No-Code AI (n8n)](06-automation-lowcode/)
 
-- When to automate vs. code; composable AI tasks
-- Build an n8n workflow using LLM nodes and webhooks
-- Connectors: email, Slack, GitHub/Jira/Notion, databases
-- Ship lightweight assistants without maintaining servers
+- Install N8N
+- Create posts for LinkedIn
+- Tailor your CV for a specific position
+
 
 ## Your Instructors
 
 - [Alexey Grigorev](https://linkedin.com/in/agrigorev)
 - [Bhavani Ravi](https://www.linkedin.com/in/bhavanicodes)
-
+- [Moein Foroughi](https://www.linkedin.com/in/moein-foroughi-ce/)
 
 ## About DataTalks.Club
 

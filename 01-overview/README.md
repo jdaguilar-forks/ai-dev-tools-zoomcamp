@@ -65,10 +65,15 @@ They form the backbone of many assistants and scaffolders.
 - [PR Agent](https://github.com/qodo-ai/pr-agent) — Automates pull request reviews and suggestions.
 
 
+## Homework
+
+- [2025 Homework](../cohorts/2025/01-overview/homework.md)
+
 
 ## Community notes
 
 Did you take notes? You can share them here
 
+* [Notes Jesus Oviedo](https://github.com/jesusoviedo/ai-dev-tools-zoomcamp/tree/main/week1#module-1--introduction-to-vibe-coding)
 * Add a link to your notes above this line
 
