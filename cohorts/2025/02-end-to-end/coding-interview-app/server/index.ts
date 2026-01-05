@@ -28,6 +28,7 @@ interface Participant {
 
 interface LanguageMapping {
   image: string;
+  context: string;
   filename: string;
   cmd: string;
 }
@@ -154,25 +155,34 @@ function execAsync(cmd: string, options: Record<string, unknown> = {}): Promise<
   });
 }
 
+interface LanguageMapping {
+  image: string; // The tag we will give to the built image
+  context: string; // The directory containing the Dockerfile
+  filename: string;
+  cmd: string;
+}
+
 /**
- * Ensure Docker image is available (pull if needed)
+ * Build Docker image for the language
  */
-async function ensureImageAvailable(image: string): Promise<void> {
-  // Check if image exists locally
-  const checkCmd = `docker image inspect ${image}`;
-  const checkResult = await execAsync(checkCmd);
+async function buildImage(tag: string, context: string): Promise<void> {
+  const contextPath = path.join(process.cwd(), 'environments', context);
+  console.log(`Building Docker image ${tag} from ${contextPath}...`);
 
-  if (checkResult.error) {
-    // Image not found, pull it
-    console.log(`Pulling Docker image: ${image}...`);
-    const pullCmd = `docker pull ${image}`;
-    const pullResult = await execAsync(pullCmd, { timeout: 120000 }); // 2 min timeout for pull
-
-    if (pullResult.error) {
-      throw new Error(`Failed to pull Docker image ${image}: ${pullResult.stderr}`);
-    }
-    console.log(`Successfully pulled ${image}`);
+  // Check if context directory exists
+  try {
+    await fs.access(contextPath);
+  } catch {
+    throw new Error(`Environment directory not found: ${contextPath}`);
   }
+
+  const buildCmd = `docker build -t ${tag} "${contextPath}"`;
+  const buildResult = await execAsync(buildCmd);
+
+  if (buildResult.error) {
+    throw new Error(`Failed to build Docker image ${tag}: ${buildResult.stderr}`);
+  }
+  console.log(`Successfully built ${tag}`);
 }
 
 /**
@@ -183,37 +193,44 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
   try {
     const mapping: Record<string, LanguageMapping> = {
       php: {
-        image: 'php:8.1-cli',
+        image: 'code-exec-php',
+        context: 'php',
         filename: 'index.php',
         cmd: `php index.php`,
       },
       ruby: {
-        image: 'ruby:3.1',
+        image: 'code-exec-ruby',
+        context: 'ruby',
         filename: 'main.rb',
         cmd: `ruby main.rb`,
       },
       go: {
-        image: 'golang:1.20',
+        image: 'code-exec-go',
+        context: 'go',
         filename: 'main.go',
         cmd: `go run main.go`,
       },
       java: {
-        image: 'openjdk:17',
+        image: 'code-exec-java',
+        context: 'java',
         filename: 'Main.java',
         cmd: `javac Main.java && java Main`,
       },
       rust: {
-        image: 'rust:1.64',
+        image: 'code-exec-rust',
+        context: 'rust',
         filename: 'main.rs',
         cmd: `rustc main.rs -o main && ./main`,
       },
       node: {
-        image: 'node:18-alpine',
+        image: 'code-exec-node',
+        context: 'node',
         filename: 'index.js',
         cmd: `node index.js`,
       },
       python: {
-        image: 'python:3.11-alpine',
+        image: 'code-exec-python',
+        context: 'python',
         filename: 'main.py',
         cmd: `python main.py`,
       },
@@ -224,9 +241,9 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
       return { stdout: '', stderr: `Unsupported language: ${language}`, code: 1 };
     }
 
-    // Ensure image is available before running
+    // Build image before running
     try {
-      await ensureImageAvailable(entry.image);
+      await buildImage(entry.image, entry.context);
     } catch (err) {
       const error = err as Error;
       return { stdout: '', stderr: error.message, code: 1 };
@@ -262,7 +279,7 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
     const DOCKER_PID = process.env.DOCKER_PID_LIMIT || '64';
 
     // Use docker create + cp + start pattern to avoid volume mounting issues in nested environments
-    const dockerCreateCmd = `docker create --network none --pids-limit=${DOCKER_PID} --memory=${DOCKER_MEMORY} --cpus=${DOCKER_CPU} -w /tmp ${entry.image} sh -c '${entry.cmd.replace(/'/g, "'\\''")}'`;
+    const dockerCreateCmd = `docker create --network none --pids-limit=${DOCKER_PID} --memory=${DOCKER_MEMORY} --cpus=${DOCKER_CPU} -w /app ${entry.image} sh -c '${entry.cmd.replace(/'/g, "'\\''")}'`;
 
     log('debug', 'Creating Docker container', { image: entry.image, cmd: entry.cmd });
     const createResult = await execAsync(dockerCreateCmd);
@@ -275,7 +292,7 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
 
     try {
       // Copy file to container
-      const cpCmd = `docker cp "${filePath}" "${containerId}:/tmp/${entry.filename}"`;
+      const cpCmd = `docker cp "${filePath}" "${containerId}:/app/${entry.filename}"`;
       await execAsync(cpCmd);
 
       // Start container and attach
@@ -340,6 +357,7 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
     return { stdout: '', stderr: error.message, code: 1 };
   }
 }
+
 
 /**
  * Endpoint: execute code on server using Docker sandbox.
