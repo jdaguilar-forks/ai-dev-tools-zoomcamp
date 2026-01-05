@@ -1,31 +1,66 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
-import { exec, spawn } from 'child_process';
+import { exec, spawn, ChildProcess, ExecException } from 'child_process';
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
-import os from 'os';
 import rateLimit from 'express-rate-limit';
 import 'dotenv/config.js';
+
+// Types
+interface Session {
+  id: string;
+  code: string;
+  language: string;
+  participants: Participant[];
+  createdAt: string;
+}
+
+interface Participant {
+  id: string;
+  username: string;
+  joinedAt: string;
+}
+
+interface LanguageMapping {
+  image: string;
+  filename: string;
+  cmd: string;
+}
+
+interface ExecResult {
+  error: ExecException | null;
+  stdout: string;
+  stderr: string;
+  code: number;
+}
+
+interface DockerResult {
+  stdout: string;
+  stderr: string;
+  code: number;
+  timedOut?: boolean;
+  error?: string;
+}
+
+interface SocketData {
+  sessionId?: string;
+  participant?: Participant;
+}
 
 const app = express();
 const server = createServer(app);
 
 // Environment configuration
 const PORT = process.env.PORT || 3001;
-const NODE_ENV = process.env.NODE_ENV || 'development';
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',');
 const CODE_EXECUTION_TIMEOUT = parseInt(process.env.CODE_EXECUTION_TIMEOUT || '10000');
 const MAX_CODE_LENGTH = parseInt(process.env.MAX_CODE_LENGTH || '50000');
-const DOCKER_MEMORY_LIMIT = process.env.DOCKER_MEMORY_LIMIT || '256m';
-const DOCKER_CPU_LIMIT = process.env.DOCKER_CPU_LIMIT || '0.5';
-const DOCKER_PID_LIMIT = process.env.DOCKER_PID_LIMIT || '64';
 
 // Logging utility
-const log = (level, message, data = {}) => {
+const log = (level: string, message: string, data: Record<string, unknown> = {}): void => {
   const timestamp = new Date().toISOString();
   console.log(JSON.stringify({ timestamp, level, message, ...data }));
 };
@@ -49,16 +84,16 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err: Error, req: Request, res: Response, _next: NextFunction): void => {
   log('error', 'Request error', { path: req.path, error: err.message });
   res.status(500).json({ error: 'Internal server error' });
 });
 
 // In-memory session storage
-const sessions = new Map();
+const sessions = new Map<string, Session>();
 
 // Create a new interview session
-app.post('/api/sessions', (req, res) => {
+app.post('/api/sessions', (req: Request, res: Response): void => {
   try {
     const sessionId = uuidv4().slice(0, 8);
     sessions.set(sessionId, {
@@ -71,28 +106,32 @@ app.post('/api/sessions', (req, res) => {
     log('info', 'Session created', { sessionId });
     res.json({ sessionId, shareableLink: `/session/${sessionId}` });
   } catch (err) {
-    log('error', 'Failed to create session', { error: err.message });
+    const error = err as Error;
+    log('error', 'Failed to create session', { error: error.message });
     res.status(500).json({ error: 'Failed to create session' });
   }
 });
 
 // Get session info
-app.get('/api/sessions/:sessionId', (req, res) => {
+app.get('/api/sessions/:sessionId', (req: Request, res: Response): void => {
   try {
     const { sessionId } = req.params;
 
     // Validate session ID format
     if (!/^[a-f0-9]{8}$/.test(sessionId)) {
-      return res.status(400).json({ error: 'Invalid session ID format' });
+      res.status(400).json({ error: 'Invalid session ID format' });
+      return;
     }
 
     const session = sessions.get(sessionId);
     if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
+      res.status(404).json({ error: 'Session not found' });
+      return;
     }
     res.json(session);
   } catch (err) {
-    log('error', 'Failed to get session', { error: err.message });
+    const error = err as Error;
+    log('error', 'Failed to get session', { error: error.message });
     res.status(500).json({ error: 'Failed to get session' });
   }
 });
@@ -100,7 +139,7 @@ app.get('/api/sessions/:sessionId', (req, res) => {
 /**
  * Helper: run command with promise
  */
-function execAsync(cmd, options = {}) {
+function execAsync(cmd: string, options: Record<string, unknown> = {}): Promise<ExecResult> {
   return new Promise((resolve) => {
     exec(cmd, { ...options, maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
       resolve({
@@ -116,7 +155,7 @@ function execAsync(cmd, options = {}) {
 /**
  * Ensure Docker image is available (pull if needed)
  */
-async function ensureImageAvailable(image) {
+async function ensureImageAvailable(image: string): Promise<void> {
   // Check if image exists locally
   const checkCmd = `docker image inspect ${image}`;
   const checkResult = await execAsync(checkCmd);
@@ -138,9 +177,9 @@ async function ensureImageAvailable(image) {
  * Run code inside a Docker container using a temporary workspace.
  * Returns { stdout, stderr, code }.
  */
-async function runInDocker(language, code) {
+async function runInDocker(language: string, code: string): Promise<DockerResult> {
   try {
-    const mapping = {
+    const mapping: Record<string, LanguageMapping> = {
       php: {
         image: 'php:8.1-cli',
         filename: 'index.php',
@@ -187,7 +226,8 @@ async function runInDocker(language, code) {
     try {
       await ensureImageAvailable(entry.image);
     } catch (err) {
-      return { stdout: '', stderr: err.message, code: 1 };
+      const error = err as Error;
+      return { stdout: '', stderr: error.message, code: 1 };
     }
 
     // Create temp dir in a volume-mounted path accessible to Docker
@@ -195,7 +235,8 @@ async function runInDocker(language, code) {
     try {
       await fs.mkdir(tmpExecDir, { recursive: true });
     } catch (mkdirErr) {
-      log('warn', 'Failed to create /tmp/exec, creating in os.tmpdir', { error: mkdirErr.message });
+      const error = mkdirErr as Error;
+      log('warn', 'Failed to create /tmp/exec, creating in os.tmpdir', { error: error.message });
     }
 
     const tmpDir = await fs.mkdtemp(path.join(tmpExecDir, `exec-${language}-`));
@@ -225,10 +266,10 @@ async function runInDocker(language, code) {
     log('debug', 'Executing Docker command', { tmpDir, image: entry.image, cmd: entry.cmd });
 
     const timeoutMs = CODE_EXECUTION_TIMEOUT;
-    let result;
+    let result: DockerResult;
     try {
-      result = await new Promise((resolve) => {
-        const proc = spawn('sh', ['-c', dockerCmd]);
+      result = await new Promise<DockerResult>((resolve) => {
+        const proc: ChildProcess = spawn('sh', ['-c', dockerCmd]);
         let stdout = '';
         let stderr = '';
         let timedOut = false;
@@ -239,45 +280,47 @@ async function runInDocker(language, code) {
           resolve({ stdout, stderr, code: 124, timedOut: true });
         }, timeoutMs);
 
-        proc.stdout.on('data', (data) => {
+        proc.stdout?.on('data', (data: Buffer) => {
           stdout += data.toString();
         });
 
-        proc.stderr.on('data', (data) => {
+        proc.stderr?.on('data', (data: Buffer) => {
           stderr += data.toString();
         });
 
-        proc.on('close', (code) => {
+        proc.on('close', (code: number | null) => {
           clearTimeout(timeout);
           if (!timedOut) {
             resolve({ stdout, stderr, code: code || 0 });
           }
         });
 
-        proc.on('error', (err) => {
+        proc.on('error', (err: Error) => {
           clearTimeout(timeout);
           resolve({ stdout, stderr, code: 1, error: err.message });
         });
       });
     } catch (err) {
-      log('error', 'Docker execution failed', { error: err.message });
-      result = { stdout: '', stderr: err?.message || String(err), code: 1 };
+      const error = err as Error;
+      log('error', 'Docker execution failed', { error: error.message });
+      result = { stdout: '', stderr: error?.message || String(err), code: 1 };
     }
 
     try {
       await fs.rm(tmpDir, { recursive: true, force: true });
-    } catch (cleanupErr) {
+    } catch {
       // ignore cleanup errors
     }
 
     const stdout = result.stdout || '';
-    const stderr = result.stderr || (result.error ? result.error.message : '');
+    const stderr = result.stderr || (result.error ? result.error : '');
     const codeExit = result.code || (result.error ? 1 : 0);
 
     return { stdout, stderr, code: codeExit };
   } catch (err) {
-    log('error', 'runInDocker fatal error', { language, error: err.message });
-    return { stdout: '', stderr: err.message, code: 1 };
+    const error = err as Error;
+    log('error', 'runInDocker fatal error', { language, error: error.message });
+    return { stdout: '', stderr: error.message, code: 1 };
   }
 }
 
@@ -285,33 +328,39 @@ async function runInDocker(language, code) {
  * Endpoint: execute code on server using Docker sandbox.
  * Body: { language: 'php'|'go'|'ruby'|'java'|'rust'|'node'|'python', code: '...' }
  */
-app.post('/api/execute', async (req, res) => {
+app.post('/api/execute', async (req: Request, res: Response): Promise<void> => {
   try {
     const { language, code } = req.body || {};
     if (!language || typeof code !== 'string') {
-      return res.status(400).json({ error: 'Missing language or code in request body' });
+      res.status(400).json({ error: 'Missing language or code in request body' });
+      return;
     }
 
     // Validate language
     const validLanguages = ['php', 'go', 'ruby', 'java', 'rust', 'node', 'python'];
     if (!validLanguages.includes(language)) {
-      return res.status(400).json({ error: `Unsupported language: ${language}` });
+      res.status(400).json({ error: `Unsupported language: ${language}` });
+      return;
     }
 
     // Validate code length
     if (code.length > MAX_CODE_LENGTH) {
-      return res.status(400).json({ error: `Code exceeds maximum length of ${MAX_CODE_LENGTH} characters` });
+      res.status(400).json({ error: `Code exceeds maximum length of ${MAX_CODE_LENGTH} characters` });
+      return;
     }
 
     try {
       const check = await execAsync('docker --version');
       if (check.error) {
         log('warn', 'Docker not available');
-        return res.status(500).json({ error: 'Docker is required on the server but not available.' });
+        res.status(500).json({ error: 'Docker is required on the server but not available.' });
+        return;
       }
     } catch (err) {
-      log('error', 'Docker check failed', { error: err.message });
-      return res.status(500).json({ error: 'Docker is required on the server but not available.' });
+      const error = err as Error;
+      log('error', 'Docker check failed', { error: error.message });
+      res.status(500).json({ error: 'Docker is required on the server but not available.' });
+      return;
     }
 
     try {
@@ -319,21 +368,23 @@ app.post('/api/execute', async (req, res) => {
       const { stdout, stderr, code: exitCode } = await runInDocker(language, code);
       res.json({ stdout, stderr, exitCode });
     } catch (err) {
-      log('error', 'Code execution failed', { language, error: err.message });
-      res.status(500).json({ error: err?.message || 'Execution error' });
+      const error = err as Error;
+      log('error', 'Code execution failed', { language, error: error.message });
+      res.status(500).json({ error: error?.message || 'Execution error' });
     }
   } catch (err) {
-    log('error', 'Execute endpoint error', { error: err.message });
+    const error = err as Error;
+    log('error', 'Execute endpoint error', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 // Socket.IO connection handling
-io.on('connection', (socket) => {
+io.on('connection', (socket: Socket) => {
   console.log(`Client connected: ${socket.id}`);
 
   // Join a session
-  socket.on('join-session', ({ sessionId, username }) => {
+  socket.on('join-session', ({ sessionId, username }: { sessionId: string; username?: string }) => {
     let session = sessions.get(sessionId);
 
     // Create session if it doesn't exist
@@ -350,7 +401,7 @@ io.on('connection', (socket) => {
 
     socket.join(sessionId);
 
-    const participant = {
+    const participant: Participant = {
       id: socket.id,
       username: username || `User-${socket.id.slice(0, 4)}`,
       joinedAt: new Date().toISOString(),
@@ -371,19 +422,18 @@ io.on('connection', (socket) => {
     console.log(`${participant.username} joined session ${sessionId}`);
 
     // Store session info on socket for cleanup
-    socket.data.sessionId = sessionId;
-    socket.data.participant = participant;
+    (socket.data as SocketData).sessionId = sessionId;
+    (socket.data as SocketData).participant = participant;
   });
 
   // Handle code changes
-  socket.on('code-change', ({ sessionId, code, cursorPosition }) => {
+  socket.on('code-change', ({ sessionId, code }: { sessionId: string; code: string; cursorPosition?: unknown }) => {
     const session = sessions.get(sessionId);
     if (session) {
       session.code = code;
       // Broadcast to all other clients in the session
       socket.to(sessionId).emit('code-update', {
         code,
-        cursorPosition,
         userId: socket.id,
       });
       // Run the code asynchronously and stream results back to the sender
@@ -428,15 +478,16 @@ io.on('connection', (socket) => {
             exitCode: typeof result.code === 'number' ? result.code : 0,
           });
         } catch (err) {
-          socket.emit('execution-chunk', { chunk: err?.message || String(err), isError: true });
-          socket.emit('execution-result', { stdout: '', stderr: err?.message || String(err), exitCode: 1 });
+          const error = err as Error;
+          socket.emit('execution-chunk', { chunk: error?.message || String(err), isError: true });
+          socket.emit('execution-result', { stdout: '', stderr: error?.message || String(err), exitCode: 1 });
         }
       })();
     }
   });
 
   // Handle language changes
-  socket.on('language-change', ({ sessionId, language }) => {
+  socket.on('language-change', ({ sessionId, language }: { sessionId: string; language: string }) => {
     const session = sessions.get(sessionId);
     if (session) {
       session.language = language;
@@ -445,7 +496,7 @@ io.on('connection', (socket) => {
   });
 
   // Handle cursor position updates
-  socket.on('cursor-update', ({ sessionId, position, username }) => {
+  socket.on('cursor-update', ({ sessionId, position, username }: { sessionId: string; position: unknown; username: string }) => {
     socket.to(sessionId).emit('remote-cursor', {
       userId: socket.id,
       position,
@@ -455,7 +506,7 @@ io.on('connection', (socket) => {
 
   // Handle disconnection
   socket.on('disconnect', () => {
-    const { sessionId, participant } = socket.data;
+    const { sessionId, participant } = socket.data as SocketData;
     if (sessionId && participant) {
       const session = sessions.get(sessionId);
       if (session) {

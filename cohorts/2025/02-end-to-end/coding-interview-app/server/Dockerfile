@@ -2,8 +2,8 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Install Docker and Podman CLI
-RUN apk add --no-cache docker podman
+# Install Docker CLI (to communicate with host Docker daemon)
+RUN apk add --no-cache docker-cli
 
 COPY package*.json ./
 

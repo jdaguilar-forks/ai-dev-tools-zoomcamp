@@ -1,0 +1,393 @@
+{
+  "info": {
+    "_postman_id": "coding-interview-api",
+    "name": "Coding Interview App API",
+    "description": "API collection for the collaborative coding interview application. Supports code execution in 7 programming languages via Docker sandbox.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Sessions",
+      "item": [
+        {
+          "name": "Create Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:3001/api/sessions",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "sessions"
+              ]
+            },
+            "description": "Creates a new collaborative coding session. Returns a unique sessionId and shareable link."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Session Info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:3001/api/sessions/12345678",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "sessions",
+                "12345678"
+              ]
+            },
+            "description": "Retrieves details of a specific session. SessionId must be 8 hexadecimal characters.\nReplace '12345678' with an actual sessionId (e.g., 'a1b2c3d4')."
+          },
+          "response": []
+        }
+      ],
+      "description": "Manage collaborative coding sessions"
+    },
+    {
+      "name": "Code Execution",
+      "item": [
+        {
+          "name": "Execute Python",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"python\",\n  \"code\": \"print('Hello from Python')\\nprint('Sum:', 2 + 3)\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute Python code in a Docker container"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute Node.js",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"node\",\n  \"code\": \"console.log('Hello from Node.js');\\nconsole.log('Sum:', 2 + 3);\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute JavaScript code using Node.js in a Docker container"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute PHP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"php\",\n  \"code\": \"<?php\\necho 'Hello from PHP';\\necho '\\\\nSum: ' . (2 + 3);\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute PHP code in a Docker container"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute Ruby",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"ruby\",\n  \"code\": \"puts 'Hello from Ruby'\\nputs 'Sum: ' + (2 + 3).to_s\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute Ruby code in a Docker container"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute Go",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"go\",\n  \"code\": \"package main\\nimport \\\"fmt\\\"\\nfunc main() {\\n  fmt.Println(\\\"Hello from Go\\\")\\n  fmt.Println(\\\"Sum:\\\", 2 + 3)\\n}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute Go code in a Docker container"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute Java",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"java\",\n  \"code\": \"public class Main {\\n  public static void main(String[] args) {\\n    System.out.println(\\\"Hello from Java\\\");\\n    System.out.println(\\\"Sum: \\\" + (2 + 3));\\n  }\\n}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute Java code in a Docker container. Note: class must be named 'Main'"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute Rust",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"rust\",\n  \"code\": \"fn main() {\\n  println!(\\\"Hello from Rust\\\");\\n  println!(\\\"Sum: {}\\\", 2 + 3);\\n}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Execute Rust code in a Docker container"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute - Error Handling (Unsupported Language)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"cobol\",\n  \"code\": \"print('test')\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Test error handling with unsupported language. Expected: 400 Bad Request"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute - Error Handling (Missing Code)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"python\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Test error handling when code is missing. Expected: 400 Bad Request"
+          },
+          "response": []
+        },
+        {
+          "name": "Execute - Error Handling (Code Too Large)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"language\": \"python\",\n  \"code\": \"x = 1\\n\" + \"x = 1\\n\".repeat(50001)\n}"
+            },
+            "url": {
+              "raw": "http://localhost:3001/api/execute",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "3001",
+              "path": [
+                "api",
+                "execute"
+              ]
+            },
+            "description": "Test error handling when code exceeds maximum length (50,000 characters). Expected: 400 Bad Request"
+          },
+          "response": []
+        }
+      ],
+      "description": "Execute code in 7 different programming languages using Docker sandbox environment"
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3001",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}
