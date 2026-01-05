@@ -21,6 +21,7 @@ function Session() {
   const [isConnected, setIsConnected] = useState(false);
   const [copied, setCopied] = useState(false);
   const [editorHeight, setEditorHeight] = useState(60);
+  const [isExecuting, setIsExecuting] = useState(false);
 
   const socketRef = useRef(null);
   const isLocalChange = useRef(false);
@@ -68,6 +69,30 @@ function Session() {
 
     socket.on('user-left', ({ id }) => {
       setParticipants((prev) => prev.filter((p) => p.id !== id));
+    });
+
+    // Receive execution-start notification
+    socket.on('execution-start', () => {
+      setOutput('');
+      setOutputType('');
+      setIsExecuting(true);
+    });
+
+    // Receive execution chunks progressively
+    socket.on('execution-chunk', ({ chunk, isError }) => {
+      setOutput((prev) => prev + chunk);
+      setOutputType(isError ? 'error' : 'success');
+    });
+
+    // Receive execution results from server (emitted after code-change runs)
+    socket.on('execution-result', ({ stdout, stderr, exitCode }) => {
+      setIsExecuting(false);
+      const parts = [];
+      if (stdout) parts.push(stdout);
+      if (stderr) parts.push(`STDERR:\n${stderr}`);
+      const out = parts.join('\n') || `Process exited with code ${exitCode}`;
+      setOutput(out);
+      setOutputType(exitCode === 0 ? 'success' : 'error');
     });
 
     return () => {
@@ -262,9 +287,9 @@ function Session() {
           <div className="resize-handle" onMouseDown={handleResizeStart} />
 
           <div className="output-panel" style={{ height: `${100 - editorHeight}%` }}>
-            <h3>Output</h3>
+            <h3>Output {isExecuting && <span style={{ fontSize: '0.8em', color: '#999' }}>(Executing...)</span>}</h3>
             <div className={`output-content ${outputType === 'error' ? 'output-error' : ''} ${outputType === 'success' ? 'output-success' : ''}`}>
-              {output || 'Click "Run Code" to execute...'}
+              {output || (isExecuting ? 'Executing code...' : 'Click "Run Code" to execute...')}
             </div>
           </div>
         </div>
