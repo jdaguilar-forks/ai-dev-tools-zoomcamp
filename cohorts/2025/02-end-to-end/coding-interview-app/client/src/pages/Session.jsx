@@ -1,0 +1,288 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import Editor from '@monaco-editor/react';
+import { io } from 'socket.io-client';
+
+// Get Socket URL from environment or use default for local development
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+// Get API URL from environment or derive from Socket URL
+const API_URL = import.meta.env.VITE_API_URL || SOCKET_URL;
+
+function Session() {
+  const { sessionId } = useParams();
+  const [code, setCode] = useState('// Loading...\n');
+  const [language, setLanguage] = useState('javascript');
+  const [output, setOutput] = useState('');
+  const [outputType, setOutputType] = useState('');
+  const [participants, setParticipants] = useState([]);
+  const [username, setUsername] = useState(() => {
+    return localStorage.getItem('interview-username') || `User-${Math.random().toString(36).slice(2, 6)}`;
+  });
+  const [isConnected, setIsConnected] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(60);
+
+  const socketRef = useRef(null);
+  const isLocalChange = useRef(false);
+  const editorRef = useRef(null);
+  const isResizing = useRef(false);
+
+  useEffect(() => {
+    localStorage.setItem('interview-username', username);
+  }, [username]);
+
+  useEffect(() => {
+    socketRef.current = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+    });
+
+    const socket = socketRef.current;
+
+    socket.on('connect', () => {
+      setIsConnected(true);
+      socket.emit('join-session', { sessionId, username });
+    });
+
+    socket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
+    socket.on('session-state', ({ code: sessionCode, language: sessionLang, participants: sessionParticipants }) => {
+      setCode(sessionCode);
+      setLanguage(sessionLang);
+      setParticipants(sessionParticipants);
+    });
+
+    socket.on('code-update', ({ code: newCode }) => {
+      isLocalChange.current = false;
+      setCode(newCode);
+    });
+
+    socket.on('language-update', ({ language: newLang }) => {
+      setLanguage(newLang);
+    });
+
+    socket.on('user-joined', (participant) => {
+      setParticipants((prev) => [...prev, participant]);
+    });
+
+    socket.on('user-left', ({ id }) => {
+      setParticipants((prev) => prev.filter((p) => p.id !== id));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [sessionId, username]);
+
+  const handleEditorChange = useCallback((value) => {
+    if (value !== undefined) {
+      isLocalChange.current = true;
+      setCode(value);
+      socketRef.current?.emit('code-change', {
+        sessionId,
+        code: value,
+      });
+    }
+  }, [sessionId]);
+
+  const handleLanguageChange = (e) => {
+    const newLang = e.target.value;
+    setLanguage(newLang);
+    socketRef.current?.emit('language-change', { sessionId, language: newLang });
+
+    const defaults = {
+      python: '# Start coding here...\n\nprint("Hello, World!")\n',
+      javascript: '// Start coding here...\n\nconsole.log("Hello, World!");\n',
+      php: '<?php\n\necho "Hello, World!";\n',
+      go: 'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println("Hello, World!")\n}\n',
+      ruby: 'puts "Hello, World!"\n',
+      java: 'public class Main {\n\tpublic static void main(String[] args) {\n\t\tSystem.out.println("Hello, World!");\n\t}\n}\n',
+      rust: 'fn main() {\n\tprintln!("Hello, world!");\n}\n',
+    };
+
+    const defaultCode = defaults[newLang] || defaults.javascript;
+
+    if (code.includes('Start coding here') || code.trim() === '') {
+      handleEditorChange(defaultCode);
+    }
+  };
+
+  const handleEditorDidMount = (editor) => {
+    editorRef.current = editor;
+  };
+
+  const runCode = async () => {
+    setOutput('');
+    setOutputType('');
+
+    try {
+      setOutput('Executing on server...');
+      setOutputType('');
+
+      const resp = await fetch(`${API_URL}/api/execute`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language, code }),
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) {
+        setOutput(data.error || 'Execution failed');
+        setOutputType('error');
+        return;
+      }
+
+      const parts = [];
+      if (data.stdout) parts.push(data.stdout);
+      if (data.stderr) parts.push(`STDERR:\n${data.stderr}`);
+      const out = parts.join('\n') || `Process exited with code ${data.exitCode}`;
+      setOutput(out);
+      setOutputType(data.exitCode === 0 ? 'success' : 'error');
+    } catch (err) {
+      setOutput(`Execution error: ${err.message}`);
+      setOutputType('error');
+    }
+  };
+
+  const copyShareLink = async () => {
+    const link = `${window.location.origin}/session/${sessionId}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      const textArea = document.createElement('textarea');
+      textArea.value = link;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleResizeStart = () => {
+    isResizing.current = true;
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing.current) return;
+
+      const contentArea = document.querySelector('.content-area');
+      if (!contentArea) return;
+
+      const containerRect = contentArea.getBoundingClientRect();
+      const newHeight = ((e.clientY - containerRect.top) / containerRect.height) * 100;
+
+      if (newHeight > 20 && newHeight < 80) {
+        setEditorHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, []);
+
+  return (
+    <>
+      <header className="header">
+        <h1>Session: {sessionId}</h1>
+        <div className="header-controls">
+          <div className="share-link-container">
+            <span className="share-link">{window.location.href}</span>
+            <button className="btn btn-secondary copy-btn" onClick={copyShareLink}>
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <select
+            className="language-select"
+            value={language}
+            onChange={handleLanguageChange}
+          >
+            <option value="javascript">JavaScript</option>
+            <option value="python">Python</option>
+            <option value="php">PHP</option>
+            <option value="go">Go</option>
+            <option value="ruby">Ruby</option>
+            <option value="java">Java</option>
+            <option value="rust">Rust</option>
+          </select>
+          <input
+            type="text"
+            className="username-input"
+            placeholder="Your name"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+          <button className="btn btn-success" onClick={runCode}>
+            Run Code
+          </button>
+          <div className="connection-status">
+            <span className={`status-dot ${isConnected ? 'status-connected' : 'status-disconnected'}`} />
+            <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="main-container">
+        <div className="content-area">
+          <div className="editor-section" style={{ height: `${editorHeight}%` }}>
+            <Editor
+              height="100%"
+              language={language}
+              value={code}
+              onChange={handleEditorChange}
+              onMount={handleEditorDidMount}
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                roundedSelection: false,
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
+                wordWrap: 'on',
+              }}
+            />
+          </div>
+
+          <div className="resize-handle" onMouseDown={handleResizeStart} />
+
+          <div className="output-panel" style={{ height: `${100 - editorHeight}%` }}>
+            <h3>Output</h3>
+            <div className={`output-content ${outputType === 'error' ? 'output-error' : ''} ${outputType === 'success' ? 'output-success' : ''}`}>
+              {output || 'Click "Run Code" to execute...'}
+            </div>
+          </div>
+        </div>
+
+        <div className="sidebar">
+          <div className="participants-panel">
+            <h3>Participants ({participants.length})</h3>
+            {participants.map((participant) => (
+              <div key={participant.id} className="participant">
+                <span className="participant-indicator" />
+                <span className="participant-name">{participant.username}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+export default Session;
