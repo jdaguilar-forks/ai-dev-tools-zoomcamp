@@ -7,7 +7,7 @@ import type { editor } from 'monaco-editor';
 // Get Socket URL from environment or use default for local development
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 // Get API URL from environment or derive from Socket URL
-const API_URL = import.meta.env.VITE_API_URL || SOCKET_URL;
+// API_URL was removed as it was unused and causing build errors
 
 interface Participant {
   id: string;
@@ -163,38 +163,21 @@ function Session() {
     editorRef.current = editor;
   };
 
-  const runCode = async () => {
-    setOutput('');
-    setOutputType('');
-
-    try {
-      setOutput('Executing on server...');
-      setOutputType('');
-
-      const resp = await fetch(`${API_URL}/api/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language, code }),
-      });
-
-      const data = await resp.json();
-      if (!resp.ok) {
-        setOutput(data.error || 'Execution failed');
-        setOutputType('error');
-        return;
-      }
-
-      const parts: string[] = [];
-      if (data.stdout) parts.push(data.stdout);
-      if (data.stderr) parts.push(`STDERR:\n${data.stderr}`);
-      const out = parts.join('\n') || `Process exited with code ${data.exitCode}`;
-      setOutput(out);
-      setOutputType(data.exitCode === 0 ? 'success' : 'error');
-    } catch (err) {
-      const error = err as Error;
-      setOutput(`Execution error: ${error.message}`);
+  const runCode = () => {
+    if (!socketRef.current || !isConnected) {
+      setOutput('Error: Not connected to server');
       setOutputType('error');
+      return;
     }
+
+    setOutput('Waiting for server...');
+    setOutputType('');
+    setIsExecuting(true);
+
+    socketRef.current.emit('run-code', {
+      sessionId,
+      code,
+    });
   };
 
   const copyShareLink = async () => {

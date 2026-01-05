@@ -59,7 +59,7 @@ describe('Session Component', () => {
     renderSession();
     const languageSelect = screen.getByRole('combobox', { name: '' });
     const options = languageSelect.querySelectorAll('option');
-    
+
     expect(options).toHaveLength(7);
   });
 
@@ -107,7 +107,7 @@ describe('Username Management', () => {
   it('should load username from localStorage if exists', () => {
     const testUsername = 'TestUser';
     localStorage.setItem('interview-username', testUsername);
-    
+
     renderSession();
     const usernameInput = screen.getByPlaceholderText('Your name');
     expect(usernameInput.value).toBe(testUsername);
@@ -116,7 +116,7 @@ describe('Username Management', () => {
   it('should generate default username if not in localStorage', () => {
     renderSession();
     const usernameInput = screen.getByPlaceholderText('Your name');
-    
+
     expect(usernameInput.value).toMatch(/^User-/);
     expect(usernameInput.value.length).toBeGreaterThan(5);
   });
@@ -125,10 +125,10 @@ describe('Username Management', () => {
     const user = userEvent.setup();
     renderSession();
     const usernameInput = screen.getByPlaceholderText('Your name');
-    
+
     await user.clear(usernameInput);
     await user.type(usernameInput, 'NewUser');
-    
+
     expect(localStorage.getItem('interview-username')).toBe('NewUser');
   });
 });
@@ -148,16 +148,16 @@ describe('Language Selection', () => {
     const user = userEvent.setup();
     renderSession();
     const languageSelect = screen.getByRole('combobox', { name: '' });
-    
+
     await user.selectOptions(languageSelect, 'python');
-    
+
     expect(languageSelect.value).toBe('python');
   });
 
   it('should support all required languages', () => {
     renderSession();
     const languageSelect = screen.getByRole('combobox', { name: '' });
-    
+
     const requiredLanguages = [
       'javascript',
       'python',
@@ -167,7 +167,7 @@ describe('Language Selection', () => {
       'java',
       'rust',
     ];
-    
+
     requiredLanguages.forEach((lang) => {
       const option = languageSelect.querySelector(`option[value="${lang}"]`);
       expect(option).toBeInTheDocument();
@@ -190,7 +190,7 @@ describe('Editor Interaction', () => {
     renderSession();
     const languageSelect = screen.getByRole('combobox', { name: '' });
     fireEvent.change(languageSelect, { target: { value: 'python' } });
-    
+
     const editor = screen.getByTestId('monaco-editor');
     expect(editor.getAttribute('data-language')).toBe('python');
   });
@@ -215,7 +215,7 @@ describe('Output Display', () => {
   it('should have output panel with correct styling classes', () => {
     renderSession();
     const outputContent = screen.getByText(/Click "Run Code" to execute/).parentElement;
-    expect(outputContent).toHaveClass('output-content');
+    expect(outputContent).toHaveClass('output-panel');
   });
 });
 
@@ -319,7 +319,7 @@ describe('UI Element Structure', () => {
     renderSession();
     const mainContainer = document.querySelector('.main-container');
     expect(mainContainer).toBeInTheDocument();
-    
+
     const contentArea = mainContainer.querySelector('.content-area');
     expect(contentArea).toBeInTheDocument();
   });

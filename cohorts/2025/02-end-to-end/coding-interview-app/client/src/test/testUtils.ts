@@ -26,7 +26,7 @@ export const emitSocketEvent = <T>(mockSocket: MockSocket, eventName: string, da
   const listeners = mockSocket.on.mock.calls
     .filter((call: [string, (data: T) => void]) => call[0] === eventName)
     .map((call: [string, (data: T) => void]) => call[1]);
-  
+
   listeners.forEach((listener: (data: T) => void) => listener(data));
 };
 
@@ -45,7 +45,7 @@ export const mockFetchResponse = <T>(data: T, ok = true): Mock<[], Promise<Fetch
       ok,
       json: () => Promise.resolve(data),
       status: ok ? 200 : 400,
-    })
+    } as FetchResponse<T>)
   );
 };
 

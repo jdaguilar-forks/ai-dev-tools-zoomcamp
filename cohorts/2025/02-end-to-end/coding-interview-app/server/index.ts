@@ -1,9 +1,11 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
-import { exec, spawn, ChildProcess, ExecException } from 'child_process';
+import { exec, spawn, ChildProcess } from 'child_process';
+import type { ExecException } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';
 import rateLimit from 'express-rate-limit';
@@ -259,24 +261,38 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
     const DOCKER_CPU = process.env.DOCKER_CPU_LIMIT || '0.5';
     const DOCKER_PID = process.env.DOCKER_PID_LIMIT || '64';
 
-    // Use docker command to execute code
-    // Both host /tmp is mounted in the container, so paths align
-    const dockerCmd = `docker run --rm --network none --pids-limit=${DOCKER_PID} --memory=${DOCKER_MEMORY} --cpus=${DOCKER_CPU} -v "${tmpDir}:/workspace" -w /workspace ${entry.image} sh -c '${entry.cmd.replace(/'/g, "'\\''")}'`;
+    // Use docker create + cp + start pattern to avoid volume mounting issues in nested environments
+    const dockerCreateCmd = `docker create --network none --pids-limit=${DOCKER_PID} --memory=${DOCKER_MEMORY} --cpus=${DOCKER_CPU} -w /tmp ${entry.image} sh -c '${entry.cmd.replace(/'/g, "'\\''")}'`;
 
-    log('debug', 'Executing Docker command', { tmpDir, image: entry.image, cmd: entry.cmd });
+    log('debug', 'Creating Docker container', { image: entry.image, cmd: entry.cmd });
+    const createResult = await execAsync(dockerCreateCmd);
 
-    const timeoutMs = CODE_EXECUTION_TIMEOUT;
-    let result: DockerResult;
+    if (createResult.error) {
+      throw new Error(`Failed to create container: ${createResult.stderr}`);
+    }
+
+    const containerId = createResult.stdout.trim();
+
     try {
+      // Copy file to container
+      const cpCmd = `docker cp "${filePath}" "${containerId}:/tmp/${entry.filename}"`;
+      await execAsync(cpCmd);
+
+      // Start container and attach
+      const startCmd = `docker start -a ${containerId}`;
+
+      const timeoutMs = CODE_EXECUTION_TIMEOUT;
+      let result: DockerResult;
+
       result = await new Promise<DockerResult>((resolve) => {
-        const proc: ChildProcess = spawn('sh', ['-c', dockerCmd]);
+        const proc: ChildProcess = spawn('sh', ['-c', startCmd]);
         let stdout = '';
         let stderr = '';
         let timedOut = false;
 
         const timeout = setTimeout(() => {
           timedOut = true;
-          proc.kill();
+          exec(`docker kill ${containerId}`, () => { });
           resolve({ stdout, stderr, code: 124, timedOut: true });
         }, timeoutMs);
 
@@ -300,23 +316,24 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
           resolve({ stdout, stderr, code: 1, error: err.message });
         });
       });
-    } catch (err) {
-      const error = err as Error;
-      log('error', 'Docker execution failed', { error: error.message });
-      result = { stdout: '', stderr: error?.message || String(err), code: 1 };
+
+      return {
+        stdout: result.stdout || '',
+        stderr: result.stderr || (result.error ? result.error : ''),
+        code: result.code || (result.error ? 1 : 0)
+      };
+
+    } finally {
+      // Always cleanup container
+      exec(`docker rm -f ${containerId}`, () => { });
+
+      // Cleanup temp local file
+      try {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      } catch {
+        // ignore cleanup errors
+      }
     }
-
-    try {
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    } catch {
-      // ignore cleanup errors
-    }
-
-    const stdout = result.stdout || '';
-    const stderr = result.stderr || (result.error ? result.error : '');
-    const codeExit = result.code || (result.error ? 1 : 0);
-
-    return { stdout, stderr, code: codeExit };
   } catch (err) {
     const error = err as Error;
     log('error', 'runInDocker fatal error', { language, error: error.message });
@@ -436,6 +453,13 @@ io.on('connection', (socket: Socket) => {
         code,
         userId: socket.id,
       });
+    }
+  });
+
+  // Handle code execution request
+  socket.on('run-code', ({ sessionId, code }: { sessionId: string; code: string }) => {
+    const session = sessions.get(sessionId);
+    if (session) {
       // Run the code asynchronously and stream results back to the sender
       (async () => {
         try {
