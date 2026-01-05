@@ -482,6 +482,12 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+// Export for testing
+export { app, server };
+
+// Only listen if not being imported for testing
+if (import.meta.url === `file://${process.argv[1]}`) {
+  server.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}

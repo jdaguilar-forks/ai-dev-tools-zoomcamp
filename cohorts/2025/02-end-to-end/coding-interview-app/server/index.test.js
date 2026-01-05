@@ -1,3 +1,11 @@
+import request from 'supertest';
+import { app, server } from './index.js';
+import { spawn } from 'child_process';
+import { exec } from 'child_process';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+
 // Mock helper: simulate the server structure for testing
 // Tests focus on business logic that can be unit tested
 
@@ -334,7 +342,7 @@ describe('Docker Integration - Code Execution', () => {
     // Helper function to run code in Docker
     const runCodeInDocker = (image, language, code) => {
         return new Promise((resolve) => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const cmdFlag = language === 'python' ? '-c' : '-e';
             const cmd = language === 'python' ? 'python' : 'node';
             const dockerCmd = `docker run --rm ${image} ${cmd} ${cmdFlag} '${code.replace(/'/g, "'\\''")}'`;
@@ -417,7 +425,7 @@ describe('Docker Integration - Code Execution', () => {
 
     describe('PHP Code Execution', () => {
         testFn('should execute simple PHP code', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = 'echo "Hello from PHP";';
             const dockerCmd = `docker run --rm php:8.1-cli php -r '${code.replace(/'/g, "'\\''")}'`;
             
@@ -461,7 +469,7 @@ describe('Docker Integration - Code Execution', () => {
         });
 
         testFn('should capture PHP runtime errors', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = 'echo $undefined_var;';
             const dockerCmd = `docker run --rm php:8.1-cli php -r '${code.replace(/'/g, "'\\''")}'`;
             
@@ -506,7 +514,7 @@ describe('Docker Integration - Code Execution', () => {
 
     describe('Ruby Code Execution', () => {
         testFn('should execute simple Ruby code', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = 'puts "Hello from Ruby"';
             const dockerCmd = `docker run --rm ruby:3.1 ruby -e '${code.replace(/'/g, "'\\''")}'`;
             
@@ -550,7 +558,7 @@ describe('Docker Integration - Code Execution', () => {
         });
 
         testFn('should capture Ruby runtime errors', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = 'puts undefined_method';
             const dockerCmd = `docker run --rm ruby:3.1 ruby -e '${code.replace(/'/g, "'\\''")}'`;
             
@@ -595,7 +603,7 @@ describe('Docker Integration - Code Execution', () => {
 
     describe('Go Code Execution', () => {
         testFn('should execute simple Go code', async () => {
-            const { exec } = require('child_process');
+            // exec already imported
             const code = `package main
 import "fmt"
 func main() {
@@ -626,7 +634,7 @@ func main() {
         }, 25000);
 
         testFn('should capture Go compilation errors', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = `package main
 func main() {
   x := undefined_var
@@ -674,7 +682,7 @@ func main() {
 
     describe('Java Code Execution', () => {
         testFn('should execute simple Java code', async () => {
-            const { exec } = require('child_process');
+            // exec already imported
             const code = `public class Hello {
   public static void main(String[] args) {
     System.out.println("Hello from Java");
@@ -705,7 +713,7 @@ func main() {
         }, 30000);
 
         testFn('should capture Java compilation errors', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = `public class Test {
   public static void main invalid syntax here
 }`;
@@ -752,7 +760,7 @@ func main() {
 
     describe('Rust Code Execution', () => {
         testFn('should execute simple Rust code', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = `fn main() {
     println!("Hello from Rust");
 }`;
@@ -798,7 +806,7 @@ func main() {
         }, 65000);
 
         testFn('should capture Rust compilation errors', async () => {
-            const { spawn } = require('child_process');
+            // spawn already imported
             const code = `fn main() {
     let x: i32 = "invalid";
 }`;
@@ -845,11 +853,7 @@ func main() {
 
     describe('Docker Container Lifecycle', () => {
         testFn('should cleanup temporary files after execution', async () => {
-            const { spawn } = require('child_process');
-            const fs = require('fs/promises');
-            const path = require('path');
-            const os = require('os');
-            
+            // fs, path, os already imported
             const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'docker-test-'));
             const testFile = path.join(tmpDir, 'test.py');
             await fs.writeFile(testFile, 'print("test")', 'utf8');
@@ -901,7 +905,7 @@ func main() {
 
         testFn('should enforce memory limits', async () => {
             const code = 'x = [1] * 1000000000; print("allocated")';
-            const { spawn } = require('child_process');
+            // spawn already imported
 
             const result = await new Promise((resolve) => {
                 const proc = spawn('sh', ['-c', `docker run --rm --memory=128m python:3.11-alpine python -c '${code.replace(/'/g, "'\\''")}'`]);
@@ -944,7 +948,7 @@ func main() {
 
         testFn('should isolate network access', async () => {
             const code = 'import socket; socket.create_connection(("google.com", 80), timeout=2)';
-            const { spawn } = require('child_process');
+            // spawn already imported
 
             const result = await new Promise((resolve) => {
                 const proc = spawn('sh', ['-c', `docker run --rm --network none python:3.11-alpine python -c '${code.replace(/'/g, "'\\''")}'`]);
@@ -1006,5 +1010,211 @@ func main() {
                 expect(result.code).toBe(0);
             }
         });
+    });
+});
+describe('Express Integration Tests', () => {
+    describe('POST /api/sessions - Create Session', () => {
+        it('should create a new session and return sessionId', async () => {
+            const response = await request(app)
+                .post('/api/sessions')
+                .expect(200);
+
+            expect(response.body).toHaveProperty('sessionId');
+            expect(response.body).toHaveProperty('shareableLink');
+            expect(response.body.sessionId).toMatch(/^[a-f0-9]{8}$/);
+            expect(response.body.shareableLink).toContain(response.body.sessionId);
+        });
+
+        it('should create multiple unique sessions', async () => {
+            const response1 = await request(app).post('/api/sessions').expect(200);
+            const response2 = await request(app).post('/api/sessions').expect(200);
+
+            expect(response1.body.sessionId).not.toBe(response2.body.sessionId);
+        });
+    });
+
+    describe('GET /api/sessions/:sessionId - Get Session Info', () => {
+        it('should return session details for valid sessionId', async () => {
+            // Create a session first
+            const createRes = await request(app).post('/api/sessions').expect(200);
+            const sessionId = createRes.body.sessionId;
+
+            // Get the session
+            const response = await request(app)
+                .get(`/api/sessions/${sessionId}`)
+                .expect(200);
+
+            expect(response.body).toHaveProperty('id', sessionId);
+            expect(response.body).toHaveProperty('code');
+            expect(response.body).toHaveProperty('language', 'javascript');
+            expect(response.body).toHaveProperty('participants');
+            expect(response.body).toHaveProperty('createdAt');
+            expect(Array.isArray(response.body.participants)).toBe(true);
+        });
+
+        it('should return 404 for non-existent but validly-formatted sessionId', async () => {
+            const response = await request(app)
+                .get('/api/sessions/deadbeef')
+                .expect(404);
+
+            expect(response.body).toHaveProperty('error');
+            expect(response.body.error).toContain('Session not found');
+        });
+
+        it('should reject invalid sessionId format', async () => {
+            const response = await request(app)
+                .get('/api/sessions/invalid-id')
+                .expect(400);
+
+            expect(response.body).toHaveProperty('error');
+            expect(response.body.error).toContain('Invalid session ID format');
+        });
+    });
+
+    describe('POST /api/execute - Code Execution', () => {
+        it('should handle Python code execution request', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    language: 'python',
+                    code: 'print("test output")',
+                })
+                .expect(200);
+
+            expect(response.body).toHaveProperty('stdout');
+            expect(response.body).toHaveProperty('stderr');
+            expect(response.body).toHaveProperty('exitCode');
+            // stdout may be empty if Docker is not available, but request should succeed
+        });
+
+        it('should handle Node.js code execution request', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    language: 'node',
+                    code: 'console.log("hello world")',
+                })
+                .expect(200);
+
+            expect(response.body).toHaveProperty('stdout');
+            expect(response.body).toHaveProperty('stderr');
+            expect(response.body).toHaveProperty('exitCode');
+            // stdout may be empty if Docker is not available, but request should succeed
+        });
+
+        it('should return error for invalid language', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    language: 'invalid-lang',
+                    code: 'some code',
+                })
+                .expect(400);
+
+            expect(response.body).toHaveProperty('error');
+            expect(response.body.error).toContain('Unsupported language');
+        });
+
+        it('should return 400 when language is missing', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    code: 'print("test")',
+                })
+                .expect(400);
+
+            expect(response.body).toHaveProperty('error');
+            expect(response.body.error).toContain('Missing language or code');
+        });
+
+        it('should return 400 when code is missing', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    language: 'python',
+                })
+                .expect(400);
+
+            expect(response.body).toHaveProperty('error');
+            expect(response.body.error).toContain('Missing language or code');
+        });
+
+        it('should reject code exceeding max length', async () => {
+            const largeCode = 'x = 1\n'.repeat(10000); // Create code larger than 50000 chars
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    language: 'python',
+                    code: largeCode,
+                })
+                .expect(400);
+
+            expect(response.body).toHaveProperty('error');
+            expect(response.body.error).toContain('exceeds maximum length');
+        });
+
+        it('should capture runtime errors', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({
+                    language: 'python',
+                    code: 'print(undefined_var)',
+                })
+                .expect(200);
+
+            expect(response.body.exitCode).not.toBe(0);
+        });
+
+        it('should support all 7 languages', async () => {
+            const languages = {
+                python: 'print("python")',
+                node: 'console.log("node")',
+                php: 'echo "php";',
+                ruby: 'puts "ruby"',
+                go: 'package main; import "fmt"; func main() { fmt.Println("go") }',
+                java: 'public class T { public static void main(String[] a) { System.out.println("java"); } }',
+                rust: 'fn main() { println!("rust"); }',
+            };
+
+            for (const [lang, code] of Object.entries(languages)) {
+                const response = await request(app)
+                    .post('/api/execute')
+                    .send({ language: lang, code })
+                    .expect(200);
+
+                expect(response.body).toHaveProperty('stdout');
+                expect(response.body).toHaveProperty('stderr');
+                expect(response.body).toHaveProperty('exitCode');
+            }
+        });
+    });
+
+    describe('CORS Configuration', () => {
+        it('should allow cross-origin requests', async () => {
+            const response = await request(app)
+                .post('/api/sessions')
+                .set('Origin', 'http://localhost:5173');
+
+            // Response should be successful (CORS allowed)
+            expect([200, 429]).toContain(response.status); // 429 if rate limited, 200 if ok
+        });
+    });
+
+    describe('Error Handling Middleware', () => {
+        it('should handle requests gracefully', async () => {
+            const response = await request(app)
+                .post('/api/execute')
+                .send({});
+            
+            // Server should return an error response (either 400 or 500)
+            expect([400, 500]).toContain(response.status);
+        });
+    });
+});
+
+describe('Server Exports', () => {
+    it('should export app and server', () => {
+        expect(app).toBeDefined();
+        expect(server).toBeDefined();
     });
 });

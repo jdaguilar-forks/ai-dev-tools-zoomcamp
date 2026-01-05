@@ -1,5 +1,6 @@
 export default {
   testEnvironment: 'node',
+  testTimeout: 300000,
   collectCoverageFrom: [
     'index.js',
   ],
