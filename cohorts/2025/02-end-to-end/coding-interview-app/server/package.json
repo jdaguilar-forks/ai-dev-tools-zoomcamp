@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js"
+    "dev": "node --watch index.js",
+    "test": "jest --detectOpenHandles",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -15,5 +17,9 @@
     "express-rate-limit": "^7.1.5",
     "socket.io": "^4.7.2",
     "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3"
   }
 }

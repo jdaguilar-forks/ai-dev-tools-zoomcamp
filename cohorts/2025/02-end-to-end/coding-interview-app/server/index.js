@@ -5,6 +5,7 @@ import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import { exec } from 'child_process';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 import os from 'os';
 import rateLimit from 'express-rate-limit';
@@ -79,12 +80,12 @@ app.post('/api/sessions', (req, res) => {
 app.get('/api/sessions/:sessionId', (req, res) => {
   try {
     const { sessionId } = req.params;
-    
+
     // Validate session ID format
     if (!/^[a-f0-9]{8}$/.test(sessionId)) {
       return res.status(400).json({ error: 'Invalid session ID format' });
     }
-    
+
     const session = sessions.get(sessionId);
     if (!session) {
       return res.status(404).json({ error: 'Session not found' });
@@ -119,13 +120,13 @@ async function ensureImageAvailable(image) {
   // Check if image exists locally
   const checkCmd = `docker image inspect ${image}`;
   const checkResult = await execAsync(checkCmd);
-  
+
   if (checkResult.error) {
     // Image not found, pull it
     console.log(`Pulling Docker image: ${image}...`);
     const pullCmd = `docker pull ${image}`;
     const pullResult = await execAsync(pullCmd, { timeout: 120000 }); // 2 min timeout for pull
-    
+
     if (pullResult.error) {
       throw new Error(`Failed to pull Docker image ${image}: ${pullResult.stderr}`);
     }
@@ -189,41 +190,79 @@ async function runInDocker(language, code) {
       return { stdout: '', stderr: err.message, code: 1 };
     }
 
-    const tmpDir = await fs.mkdtemp(path.join('/tmp/exec', `exec-${language}-`));
+    // Create temp dir in a volume-mounted path accessible to Docker
+    const tmpExecDir = '/tmp/exec';
+    try {
+      await fs.mkdir(tmpExecDir, { recursive: true });
+    } catch (mkdirErr) {
+      log('warn', 'Failed to create /tmp/exec, creating in os.tmpdir', { error: mkdirErr.message });
+    }
+
+    const tmpDir = await fs.mkdtemp(path.join(tmpExecDir, `exec-${language}-`));
     log('debug', 'Created temp directory', { tmpDir });
-    
+
     const filePath = path.join(tmpDir, entry.filename);
-    
+
     await fs.writeFile(filePath, code, 'utf8');
     log('debug', 'File written successfully', { filePath, codeLength: code.length });
-    
+
     // Verify file was written
     const stats = await fs.stat(filePath);
     log('debug', 'File stats', { filePath, size: stats.size });
-    
-    // Make directory and file world-readable for rootless Podman/Docker
+
+    // Make directory and file world-readable for Docker containers
     await fs.chmod(tmpDir, 0o777);
-    await fs.chmod(filePath, 0o644);
+    await fs.chmod(filePath, 0o777);
 
     const DOCKER_MEMORY = process.env.DOCKER_MEMORY_LIMIT || '256m';
     const DOCKER_CPU = process.env.DOCKER_CPU_LIMIT || '0.5';
     const DOCKER_PID = process.env.DOCKER_PID_LIMIT || '64';
 
-    // Use podman when running in container, docker otherwise
-    const isInContainer = fs.existsSync('/.dockerenv');
-    const containerCmd = isInContainer ? 'podman' : 'docker';
-    const unsernsFlag = isInContainer ? '--userns=keep-id' : '';
-    const dockerCmd = `${containerCmd} run --rm ${unsernsFlag} --network none --pids-limit=${DOCKER_PID} --memory=${DOCKER_MEMORY} --cpus=${DOCKER_CPU} -v "${tmpDir}:/workspace" -w /workspace ${entry.image} sh -c '${entry.cmd.replace(/'/g, "'\\''")}'`.trim().replace(/  +/g, ' ');
-    
+    // Use docker command to execute code
+    // Both host /tmp is mounted in the container, so paths align
+    const dockerCmd = `docker run --rm --network none --pids-limit=${DOCKER_PID} --memory=${DOCKER_MEMORY} --cpus=${DOCKER_CPU} -v "${tmpDir}:/workspace" -w /workspace ${entry.image} sh -c '${entry.cmd.replace(/'/g, "'\\''")}'`;
+
     log('debug', 'Executing Docker command', { tmpDir, image: entry.image, cmd: entry.cmd });
 
     const timeoutMs = CODE_EXECUTION_TIMEOUT;
     let result;
     try {
-      result = await execAsync(dockerCmd, { timeout: timeoutMs });
+      result = await new Promise((resolve) => {
+        const { spawn } = require('child_process');
+        const proc = spawn('sh', ['-c', dockerCmd]);
+        let stdout = '';
+        let stderr = '';
+        let timedOut = false;
+
+        const timeout = setTimeout(() => {
+          timedOut = true;
+          proc.kill();
+          resolve({ stdout, stderr, code: 124, timedOut: true });
+        }, timeoutMs);
+
+        proc.stdout.on('data', (data) => {
+          stdout += data.toString();
+        });
+
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        proc.on('close', (code) => {
+          clearTimeout(timeout);
+          if (!timedOut) {
+            resolve({ stdout, stderr, code: code || 0 });
+          }
+        });
+
+        proc.on('error', (err) => {
+          clearTimeout(timeout);
+          resolve({ stdout, stderr, code: 1, error: err.message });
+        });
+      });
     } catch (err) {
-      log('error', 'Docker execution failed', { error: err.message, stderr: err.stderr });
-      result = { error: err, stdout: '', stderr: err?.message || String(err), code: 1 };
+      log('error', 'Docker execution failed', { error: err.message });
+      result = { stdout: '', stderr: err?.message || String(err), code: 1 };
     }
 
     try {
@@ -348,6 +387,52 @@ io.on('connection', (socket) => {
         cursorPosition,
         userId: socket.id,
       });
+      // Run the code asynchronously and stream results back to the sender
+      (async () => {
+        try {
+          if (typeof code !== 'string') {
+            socket.emit('execution-chunk', { chunk: '', isError: true });
+            socket.emit('execution-result', { stdout: '', stderr: 'Invalid code payload', exitCode: 1 });
+            return;
+          }
+
+          if (code.length > MAX_CODE_LENGTH) {
+            socket.emit('execution-chunk', { chunk: `Code exceeds maximum length of ${MAX_CODE_LENGTH} characters\n`, isError: true });
+            socket.emit('execution-result', {
+              stdout: '',
+              stderr: `Code exceeds maximum length of ${MAX_CODE_LENGTH} characters`,
+              exitCode: 1,
+            });
+            return;
+          }
+
+          // Emit execution-start event
+          socket.emit('execution-start');
+
+          const language = session.language || 'javascript';
+          const result = await runInDocker(language, code);
+
+          // Stream stdout in chunks
+          if (result.stdout) {
+            socket.emit('execution-chunk', { chunk: result.stdout, isError: false });
+          }
+
+          // Stream stderr in chunks
+          if (result.stderr) {
+            socket.emit('execution-chunk', { chunk: result.stderr, isError: true });
+          }
+
+          // Final result
+          socket.emit('execution-result', {
+            stdout: result.stdout || '',
+            stderr: result.stderr || '',
+            exitCode: typeof result.code === 'number' ? result.code : 0,
+          });
+        } catch (err) {
+          socket.emit('execution-chunk', { chunk: err?.message || String(err), isError: true });
+          socket.emit('execution-result', { stdout: '', stderr: err?.message || String(err), exitCode: 1 });
+        }
+      })();
     }
   });
 
