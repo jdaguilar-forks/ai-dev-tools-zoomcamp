@@ -8,7 +8,7 @@ A full-stack real-time collaborative coding platform for conducting online inter
 
 ### Backend (Node.js/Express on port 3001)
 
-- **server/index.js**: Express + Socket.IO server managing session state and WebSocket communication
+- **server/index.ts**: Express + Socket.IO server managing session state and WebSocket communication
 - **In-memory session storage**: Sessions stored as Map objects with `{id, code, language, participants, createdAt}`
 - **Docker-based code execution**: All code runs in isolated containers with resource limits (256MB memory, 0.5 CPU, no network access)
 - **Key endpoints**:
@@ -19,13 +19,13 @@ A full-stack real-time collaborative coding platform for conducting online inter
 
 ### Frontend (React 18 + Vite on port 5173)
 
-- **client/src/App.jsx**: Router with Home (create session) and Session (collaboration) pages
-- **client/src/pages/Session.jsx**: Main collaboration component using:
+- **client/src/App.tsx**: Router with Home (create session) and Session (collaboration) pages
+- **client/src/pages/Session.tsx**: Main collaboration component using:
   - Monaco Editor (`@monaco-editor/react`) for syntax highlighting + code editing
   - Socket.IO client for real-time sync
   - Resizable editor/output panel with drag-to-resize handle
   - Server-side code execution via `/api/execute` endpoint
-- **client/src/pages/Home.jsx**: Session creation and joining UI
+- **client/src/pages/Home.tsx**: Session creation and joining UI
 - **Local state management**: useState for code, language, output, participants, username, editorHeight
 - **Persistent storage**: Username stored in localStorage as `interview-username`
 - **Responsive UI**: Flexbox layout with mobile-first breakpoints (480px, 768px, 1024px)
@@ -34,7 +34,9 @@ A full-stack real-time collaborative coding platform for conducting online inter
 
 ### Code Execution (Docker Sandbox)
 
-- **Supported Languages**: php:8.1-cli, golang:1.20, ruby:3.1, openjdk:17, rust:1.64, node:18-alpine, python:3.11-alpine
+- **Supported Languages**: php, python, go, ruby, java, rust, node (plus javascript mapped to node)
+- **Environments**: Dockerfiles located in `server/environments/<language>/`
+- **Dynamic Build**: Images are built dynamically from `server/environments` on demand using `docker build`
 - **Security**: Docker containers run with:
   - `--network none` (no external network access)
   - `--pids-limit=64` (max 64 processes)
@@ -161,7 +163,7 @@ The application follows a **straightforward monolithic + client-server pattern**
 
 ### Unit Tests (to implement)
 
-**Backend** (`server/index.test.js`):
+**Backend** (`server/index.test.ts`):
 ```javascript
 // Language mapping validation
 test('runInDocker maps all supported languages to Docker images')
@@ -176,7 +178,7 @@ test('timeout error is caught and returned')
 test('temp directory is cleaned up after execution')
 ```
 
-**Frontend** (`client/src/pages/Session.test.jsx`):
+**Frontend** (`client/src/pages/Session.test.tsx`):
 ```javascript
 // Editor state
 test('handleEditorChange updates code state')
@@ -228,9 +230,9 @@ test('POST /api/execute with invalid language → returns 400 error')
 
 ## Files to Reference
 
-- **server/index.js**: Socket.IO events, session lifecycle, Docker sandbox executor
-- **client/src/pages/Session.jsx**: Collaboration UI, resizable editor, server code execution
-- **client/src/pages/Home.jsx**: Session creation flow
+- **server/index.ts**: Socket.IO events, session lifecycle, Docker sandbox executor
+- **client/src/pages/Session.tsx**: Collaboration UI, resizable editor, server code execution
+- **client/src/pages/Home.tsx**: Session creation flow
 - **SETUP.md**: Port configuration, Docker/Podman setup, troubleshooting
 - **INTERVIEW_APP_README.md**: API endpoints and WebSocket event contracts
 
@@ -243,10 +245,12 @@ test('POST /api/execute with invalid language → returns 400 error')
 4. Test with multiple browser tabs (one joins as User-1, another as User-2)
 
 **Adding a New Language**:
-1. Add to `mapping` object in `runInDocker()` with Docker image + filename + run command
-2. Add default snippet to `defaults` object in `handleLanguageChange()`
-3. Add `<option>` to language select dropdown
-4. Test execution and output formatting
+1. Create a new directory `server/environments/<language>`
+2. Add a `Dockerfile` and entrypoint script
+3. Add to `mapping` object in `runInDocker()` with Docker image + filename + run command
+4. Add default snippet to `defaults` object in `handleLanguageChange()`
+5. Add `<option>` to language select dropdown
+6. Test execution and output formatting
 
 **Debugging**:
 - Check backend logs: `npm run dev` shows `Client connected: [socket.id]`
