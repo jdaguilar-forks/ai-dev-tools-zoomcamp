@@ -228,6 +228,12 @@ async function runInDocker(language: string, code: string): Promise<DockerResult
         filename: 'index.js',
         cmd: `node index.js`,
       },
+      javascript: {
+        image: 'code-exec-node',
+        context: 'node',
+        filename: 'index.js',
+        cmd: `node index.js`,
+      },
       python: {
         image: 'code-exec-python',
         context: 'python',
@@ -372,7 +378,7 @@ app.post('/api/execute', async (req: Request, res: Response): Promise<void> => {
     }
 
     // Validate language
-    const validLanguages = ['php', 'go', 'ruby', 'java', 'rust', 'node', 'python'];
+    const validLanguages = ['php', 'go', 'ruby', 'java', 'rust', 'node', 'python', 'javascript'];
     if (!validLanguages.includes(language)) {
       res.status(400).json({ error: `Unsupported language: ${language}` });
       return;
