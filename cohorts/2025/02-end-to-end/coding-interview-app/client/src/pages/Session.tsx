@@ -37,11 +37,11 @@ type SupportedLanguage = 'javascript' | 'python' | 'php' | 'go' | 'ruby' | 'java
 const languageDefaults: Record<SupportedLanguage, string> = {
   python: '# Start coding here...\n\nprint("Hello, World!")\n',
   javascript: '// Start coding here...\n\nconsole.log("Hello, World!");\n',
-  php: '<?php\n\necho "Hello, World!";\n',
-  go: 'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println("Hello, World!")\n}\n',
-  ruby: 'puts "Hello, World!"\n',
-  java: 'public class Main {\n\tpublic static void main(String[] args) {\n\t\tSystem.out.println("Hello, World!");\n\t}\n}\n',
-  rust: 'fn main() {\n\tprintln!("Hello, world!");\n}\n',
+  php: '<?php\n\n// Start coding here...\necho "Hello, World!";\n',
+  go: 'package main\n\nimport "fmt"\n\n// Start coding here...\nfunc main() {\n\tfmt.Println("Hello, World!")\n}\n',
+  ruby: '# Start coding here...\nputs "Hello, World!"\n',
+  java: 'public class Main {\n\tpublic static void main(String[] args) {\n\t\t// Start coding here...\n\t\tSystem.out.println("Hello, World!");\n\t}\n}\n',
+  rust: '// Start coding here...\nfn main() {\n\tprintln!("Hello, world!");\n}\n',
 };
 
 function Session() {
@@ -154,7 +154,7 @@ function Session() {
 
     const defaultCode = languageDefaults[newLang] || languageDefaults.javascript;
 
-    if (code.includes('Start coding here') || code.trim() === '') {
+    if (code.includes('Start coding here') || code.trim() === '' || code.includes('Loading...')) {
       handleEditorChange(defaultCode);
     }
   };

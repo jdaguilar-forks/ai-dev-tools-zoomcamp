@@ -194,6 +194,23 @@ describe('Editor Interaction', () => {
     const editor = screen.getByTestId('monaco-editor');
     expect(editor.getAttribute('data-language')).toBe('python');
   });
+
+  it('should update editor content with Hello World when language changes', async () => {
+    const user = userEvent.setup();
+    renderSession();
+    const languageSelect = screen.getByRole('combobox', { name: '' });
+    const editor = screen.getByTestId('monaco-editor') as HTMLTextAreaElement;
+
+    // Change to Python
+    await user.selectOptions(languageSelect, 'python');
+    expect(editor.value).toContain('print("Hello, World!")');
+    expect(editor.value).toContain('# Start coding here...');
+
+    // Change to Go
+    await user.selectOptions(languageSelect, 'go');
+    expect(editor.value).toContain('fmt.Println("Hello, World!")');
+    expect(editor.value).toContain('// Start coding here...');
+  });
 });
 
 describe('Output Display', () => {
